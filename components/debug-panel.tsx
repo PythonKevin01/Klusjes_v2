@@ -8,10 +8,18 @@ export function DebugPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<string>("Unknown");
   const [dbStatus, setDbStatus] = useState<string>("Checking...");
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       checkDatabaseConnection();
+      
+      // Update last refresh timestamp every 3 seconds to show polling is working
+      const interval = setInterval(() => {
+        setLastRefresh(new Date());
+      }, 3000);
+      
+      return () => clearInterval(interval);
     }
   }, [isOpen]);
 
@@ -27,6 +35,10 @@ export function DebugPanel() {
     } catch {
       setDbStatus("❌ Database connection failed");
     }
+  };
+
+  const forceRefresh = () => {
+    window.location.reload();
   };
 
   const testAPI = async () => {
@@ -122,17 +134,23 @@ export function DebugPanel() {
       <div className="space-y-2">
         <div className="text-sm space-y-1">
           <div>
-            <strong>API Status:</strong><br />
+            <strong>Database:</strong><br />
             <span className="text-xs">{dbStatus}</span>
           </div>
           <div>
-            <strong>Sync Mode:</strong><br />
-            <span className="text-xs">🔄 Smart Polling (3s interval)</span>
+            <strong>Polling:</strong><br />
+            <span className="text-xs">🔄 Active (3s interval, 5s delay start)</span>
           </div>
           <div>
-            <strong>Real-time:</strong><br />
-            <span className="text-xs">🟢 Active (tab visible)</span>
+            <strong>Tab Status:</strong><br />
+            <span className="text-xs">🟢 {document.hidden ? 'Hidden (paused)' : 'Visible (active)'}</span>
           </div>
+          {lastRefresh && (
+            <div>
+              <strong>Last Update:</strong><br />
+              <span className="text-xs">{lastRefresh.toLocaleTimeString()}</span>
+            </div>
+          )}
         </div>
         
         <div className="flex flex-col gap-1">
@@ -144,6 +162,9 @@ export function DebugPanel() {
           </Button>
           <Button onClick={testDirectFetch} size="sm" variant="outline">
             Test Direct
+          </Button>
+          <Button onClick={forceRefresh} size="sm" variant="secondary">
+            Force Refresh
           </Button>
           <Button onClick={clearCache} size="sm" variant="destructive">
             Clear Cache

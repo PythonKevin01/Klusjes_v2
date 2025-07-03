@@ -87,11 +87,15 @@ export function useRooms() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
 
   // Load rooms from API or localStorage
   useEffect(() => {
-    const loadRooms = async () => {
+    const loadRooms = async (isInitial: boolean = false) => {
       try {
+        if (isInitial) setLoading(true);
+        if (!isInitial) setIsPolling(true);
+        
         if (isOnline()) {
           const apiRooms = await roomsApi.getAll();
           setRooms(apiRooms);
@@ -120,11 +124,13 @@ export function useRooms() {
           storage.set("klusjes-rooms", defaultRooms);
         }
       } finally {
-        setLoading(false);
+        if (isInitial) setLoading(false);
+        if (!isInitial) setIsPolling(false);
       }
     };
 
-    loadRooms();
+    // Initial load
+    loadRooms(true);
     
     // Smart polling - fast and battery-friendly fallback
     if (isOnline()) {
@@ -132,18 +138,20 @@ export function useRooms() {
       
       const startPolling = () => {
         pollInterval = setInterval(() => {
-          if (isOnline() && !loading && !document.hidden) {
-            loadRooms();
+          if (isOnline() && !isPolling && !document.hidden) {
+            loadRooms(false);
           }
-        }, 3000); // Even faster: check every 3 seconds
+        }, 3000); // Check every 3 seconds
       };
       
       const stopPolling = () => {
         if (pollInterval) clearInterval(pollInterval);
       };
       
-      // Start polling immediately
-      startPolling();
+      // Start polling after a short delay to let initial load finish
+      const timeoutId = setTimeout(() => {
+        startPolling();
+      }, 5000);
       
       // Pause polling when tab is hidden, resume when visible
       const handleVisibilityChange = () => {
@@ -157,11 +165,12 @@ export function useRooms() {
       document.addEventListener('visibilitychange', handleVisibilityChange);
       
       return () => {
+        clearTimeout(timeoutId);
         stopPolling();
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
-  }, []);
+  }, [isPolling]);
 
   const addRoom = useCallback(async (name: string, description: string = "", color: string = "#6366f1") => {
     try {
@@ -236,11 +245,15 @@ export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
 
   // Load tasks from API or localStorage
   useEffect(() => {
-    const loadTasks = async () => {
+    const loadTasks = async (isInitial: boolean = false) => {
       try {
+        if (isInitial) setLoading(true);
+        if (!isInitial) setIsPolling(true);
+        
         if (isOnline()) {
           const apiTasks = await tasksApi.getAll();
           setTasks(apiTasks);
@@ -297,11 +310,13 @@ export function useTasks() {
           storage.set("klusjes-tasks", defaultTasks);
         }
       } finally {
-        setLoading(false);
+        if (isInitial) setLoading(false);
+        if (!isInitial) setIsPolling(false);
       }
     };
 
-    loadTasks();
+    // Initial load
+    loadTasks(true);
     
     // Smart polling - fast and battery-friendly fallback
     if (isOnline()) {
@@ -309,18 +324,20 @@ export function useTasks() {
       
       const startPolling = () => {
         pollInterval = setInterval(() => {
-          if (isOnline() && !loading && !document.hidden) {
-            loadTasks();
+          if (isOnline() && !isPolling && !document.hidden) {
+            loadTasks(false);
           }
-        }, 3000); // Even faster: check every 3 seconds
+        }, 3000); // Check every 3 seconds
       };
       
       const stopPolling = () => {
         if (pollInterval) clearInterval(pollInterval);
       };
       
-      // Start polling immediately
-      startPolling();
+      // Start polling after a short delay to let initial load finish
+      const timeoutId = setTimeout(() => {
+        startPolling();
+      }, 5000);
       
       // Pause polling when tab is hidden, resume when visible
       const handleVisibilityChange = () => {
@@ -334,11 +351,12 @@ export function useTasks() {
       document.addEventListener('visibilitychange', handleVisibilityChange);
       
       return () => {
+        clearTimeout(timeoutId);
         stopPolling();
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
-  }, []);
+  }, [isPolling]);
 
   const addTask = useCallback(async (roomId: string, title: string, description: string, estimatedDuration: number, priority: boolean, dueDate?: string) => {
     try {
