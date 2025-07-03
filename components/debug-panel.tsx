@@ -1,12 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { storage } from "@/lib/utils";
 
 export function DebugPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<string>("Unknown");
+  const [dbStatus, setDbStatus] = useState<string>("Checking...");
+
+  useEffect(() => {
+    if (isOpen) {
+      checkDatabaseConnection();
+    }
+  }, [isOpen]);
+
+  const checkDatabaseConnection = async () => {
+    try {
+      const response = await fetch("/api/test.php");
+      const data = await response.json();
+      if (data.status === 'success') {
+        setDbStatus("✅ Database connection successful");
+      } else {
+        setDbStatus("❌ Database connection failed");
+      }
+    } catch {
+      setDbStatus("❌ Database connection failed");
+    }
+  };
 
   const testAPI = async () => {
     try {
@@ -102,11 +123,15 @@ export function DebugPanel() {
         <div className="text-sm space-y-1">
           <div>
             <strong>API Status:</strong><br />
-            <span className="text-xs">{apiStatus}</span>
+            <span className="text-xs">{dbStatus}</span>
           </div>
           <div>
             <strong>Sync Mode:</strong><br />
-            <span className="text-xs">🔄 Smart Polling (3s)</span>
+            <span className="text-xs">🔄 Smart Polling (3s interval)</span>
+          </div>
+          <div>
+            <strong>Real-time:</strong><br />
+            <span className="text-xs">🟢 Active (tab visible)</span>
           </div>
         </div>
         
