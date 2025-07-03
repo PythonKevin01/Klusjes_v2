@@ -81,4 +81,10 @@ export function isKeyboardEvent(
     !!event.shiftKey === !!modifiers.shift &&
     !!event.altKey === !!modifiers.alt
   );
+}
+
+// Check if app should use API vs localStorage
+export function isOnline(): boolean {
+  // Always try API in production - fallback to localStorage on failure
+  return typeof window !== "undefined" && window.location.hostname !== "localhost";
 } 

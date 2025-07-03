@@ -3,25 +3,41 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Room } from "@/types";
 
 interface TaskFormProps {
   isOpen: boolean;
   onClose: () => void;
+  rooms: Room[];
+  defaultRoomId: string | null;
   onSubmit: (data: {
     title: string;
     description: string;
     estimatedDuration: number;
     priority: boolean;
+    roomId: string;
+    dueDate?: string;
   }) => void;
 }
 
-export function TaskForm({ isOpen, onClose, onSubmit }: TaskFormProps) {
+export function TaskForm({ isOpen, onClose, rooms, defaultRoomId, onSubmit }: TaskFormProps) {
   const [formData, setFormData] = React.useState({
     title: "",
     description: "",
     estimatedDuration: 30,
     priority: false,
+    roomId: defaultRoomId || "",
+    dueDate: "",
   });
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setFormData(prev => ({
+        ...prev,
+        roomId: defaultRoomId || prev.roomId,
+      }));
+    }
+  }, [isOpen, defaultRoomId]);
 
   const handleSubmit = React.useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +47,8 @@ export function TaskForm({ isOpen, onClose, onSubmit }: TaskFormProps) {
         description: formData.description.trim(),
         estimatedDuration: formData.estimatedDuration,
         priority: formData.priority,
+        roomId: formData.roomId || defaultRoomId || "",
+        dueDate: formData.dueDate || undefined,
       });
       // Reset form
       setFormData({
@@ -38,9 +56,11 @@ export function TaskForm({ isOpen, onClose, onSubmit }: TaskFormProps) {
         description: "",
         estimatedDuration: 30,
         priority: false,
+        roomId: defaultRoomId || "",
+        dueDate: "",
       });
     }
-  }, [formData, onSubmit]);
+  }, [formData, onSubmit, defaultRoomId]);
 
   const handleClose = React.useCallback(() => {
     onClose();
@@ -50,8 +70,10 @@ export function TaskForm({ isOpen, onClose, onSubmit }: TaskFormProps) {
       description: "",
       estimatedDuration: 30,
       priority: false,
+      roomId: defaultRoomId || "",
+      dueDate: "",
     });
-  }, [onClose]);
+  }, [onClose, defaultRoomId]);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -129,15 +151,57 @@ export function TaskForm({ isOpen, onClose, onSubmit }: TaskFormProps) {
               className="w-4 h-4 rounded border-border text-yellow-500 focus:ring-yellow-500"
             />
             <label htmlFor="priority" className="text-sm font-medium">
-              🏆 Hoge prioriteit
+              <span className="text-[hsl(var(--priority-high))]">prio</span> Hoge prioriteit
             </label>
           </div>
 
+          {/* Room select */}
+          <div>
+            <label htmlFor="room-select" className="block text-sm font-medium mb-1">
+              Kamer *
+            </label>
+            <select
+              id="room-select"
+              value={formData.roomId}
+              onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              required
+            >
+              <option value="" disabled>Kies een kamer</option>
+              {rooms.map((room) => (
+                <option key={room.id} value={room.id}>{room.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Due date */}
+          <div>
+            <label htmlFor="due-date" className="block text-sm font-medium mb-1">
+              Deadline
+            </label>
+            <input
+              id="due-date"
+              type="date"
+              value={formData.dueDate}
+              onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
           <div className="flex gap-3 pt-4">
-            <Button type="submit" className="flex-1">
+            <Button 
+              type="submit" 
+              variant="outline" 
+              className="flex-1 border-[hsl(var(--priority-high))] text-[hsl(var(--priority-high))] hover:bg-[hsl(var(--priority-high))/10]"
+            >
               Klusje toevoegen
             </Button>
-            <Button type="button" variant="outline" onClick={handleClose}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={handleClose}
+              className="border-[hsl(var(--priority-high))] text-[hsl(var(--priority-high))] hover:bg-[hsl(var(--priority-high))/10]"
+            >
               Annuleren
             </Button>
           </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Room, Task, TaskFormData } from "@/types";
-import { storage, debounce, generateId } from "./utils";
+import { storage, debounce, generateId, isOnline } from "./utils";
+import { roomsApi, tasksApi } from "./api";
 
 // Mock initial data
 export const initialRooms: Room[] = [
@@ -73,125 +74,357 @@ export const initialTasks: Task[] = [
     completedAt: new Date(),
     estimatedDuration: 5,
   },
-];
+  ];
 
-// Hook for managing rooms with localStorage persistence
+// Pending sync interface
+interface PendingSync {
+  rooms: Array<{ action: 'create' | 'update' | 'delete'; data: any }>;
+  tasks: Array<{ action: 'create' | 'update' | 'delete'; data: any }>;
+}
+
+// Hook for managing rooms with API and localStorage fallback
 export function useRooms() {
-  const [rooms, setRooms] = useState<Room[]>(() => 
-    storage.get("klusjes-rooms", initialRooms)
-  );
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Debounced save to localStorage
-  const saveToStorage = useMemo(
-    () => debounce((rooms: Room[]) => storage.set("klusjes-rooms", rooms), 500),
-    []
-  );
-
+  // Load rooms from API or localStorage
   useEffect(() => {
-    saveToStorage(rooms);
-  }, [rooms, saveToStorage]);
-
-  const addRoom = useCallback((roomData: { name: string; color: string; description?: string }) => {
-    const newRoom: Room = {
-      id: generateId(),
-      ...roomData,
+    const loadRooms = async () => {
+      try {
+        if (isOnline()) {
+          const apiRooms = await roomsApi.getAll();
+          setRooms(apiRooms);
+          // Cache in localStorage for offline use
+          storage.set("klusjes-rooms", apiRooms);
+        } else {
+          // Offline: load from localStorage
+          const cachedRooms = storage.get("klusjes-rooms", []);
+          setRooms(cachedRooms);
+        }
+      } catch (err) {
+        console.error('API Error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load rooms');
+        // Fallback to localStorage on error
+        const cachedRooms = storage.get("klusjes-rooms", []);
+        setRooms(cachedRooms);
+        
+        // If no cached data, provide default rooms for testing
+        if (cachedRooms.length === 0) {
+          const defaultRooms = [
+            { id: '1', name: 'Woonkamer', description: 'Gezellige ruimte', color: '#6366f1' },
+            { id: '2', name: 'Keuken', description: 'Hart van het huis', color: '#10b981' },
+            { id: '3', name: 'Slaapkamer', description: 'Rustige plek', color: '#8b5cf6' },
+          ];
+          setRooms(defaultRooms);
+          storage.set("klusjes-rooms", defaultRooms);
+        }
+      } finally {
+        setLoading(false);
+      }
     };
-    setRooms(prev => [...prev, newRoom]);
-    return newRoom;
+
+    loadRooms();
+    
+    // Smart polling - fast and battery-friendly fallback
+    if (isOnline()) {
+      let pollInterval: NodeJS.Timeout;
+      
+      const startPolling = () => {
+        pollInterval = setInterval(() => {
+          if (isOnline() && !loading && !document.hidden) {
+            loadRooms();
+          }
+        }, 3000); // Even faster: check every 3 seconds
+      };
+      
+      const stopPolling = () => {
+        if (pollInterval) clearInterval(pollInterval);
+      };
+      
+      // Start polling immediately
+      startPolling();
+      
+      // Pause polling when tab is hidden, resume when visible
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          stopPolling();
+        } else {
+          startPolling();
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+        stopPolling();
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
   }, []);
 
-  const updateRoom = useCallback((roomId: string, updates: Partial<Room>) => {
-    setRooms(prev => 
-      prev.map(room => 
+  const addRoom = useCallback(async (name: string, description: string = "", color: string = "#6366f1") => {
+    try {
+      if (isOnline()) {
+        const newRoom = await roomsApi.create({ name, description, color });
+        setRooms(prev => [...prev, newRoom]);
+        storage.set("klusjes-rooms", [...rooms, newRoom]);
+        return newRoom;
+      } else {
+        // Offline: create locally
+        const newRoom: Room = {
+          id: generateId(),
+          name,
+          description,
+          color,
+        };
+        setRooms(prev => [...prev, newRoom]);
+        storage.set("klusjes-rooms", [...rooms, newRoom]);
+        // Mark for sync when online
+        const pendingSync: PendingSync = storage.get("pending-sync", { rooms: [], tasks: [] });
+        pendingSync.rooms.push({ action: 'create', data: newRoom });
+        storage.set("pending-sync", pendingSync);
+        return newRoom;
+      }
+    } catch (err) {
+      throw new Error('Failed to add room');
+    }
+  }, [rooms]);
+
+  const updateRoom = useCallback(async (roomId: string, updates: Partial<Room>) => {
+    try {
+      if (isOnline()) {
+        await roomsApi.update({ ...updates, id: roomId });
+      }
+      setRooms(prev => 
+        prev.map(room => 
+          room.id === roomId ? { ...room, ...updates } : room
+        )
+      );
+      storage.set("klusjes-rooms", rooms.map(room => 
         room.id === roomId ? { ...room, ...updates } : room
-      )
-    );
-  }, []);
+      ));
+    } catch (err) {
+      throw new Error('Failed to update room');
+    }
+  }, [rooms]);
 
-  const deleteRoom = useCallback((roomId: string) => {
-    setRooms(prev => prev.filter(room => room.id !== roomId));
-  }, []);
+  const deleteRoom = useCallback(async (roomId: string) => {
+    try {
+      if (isOnline()) {
+        await roomsApi.delete(roomId);
+      }
+      setRooms(prev => prev.filter(room => room.id !== roomId));
+      storage.set("klusjes-rooms", rooms.filter(room => room.id !== roomId));
+    } catch (err) {
+      throw new Error('Failed to delete room');
+    }
+  }, [rooms]);
 
   return {
     rooms,
+    loading,
+    error,
     addRoom,
     updateRoom,
     deleteRoom,
   };
 }
 
-// Hook for managing tasks with localStorage persistence
+// Hook for managing tasks with API and localStorage fallback
 export function useTasks() {
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const stored = storage.get("klusjes-tasks", initialTasks);
-    // Convert date strings back to Date objects
-    return stored.map((task: any) => ({
-      ...task,
-      createdAt: new Date(task.createdAt),
-      completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
-      dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-    }));
-  });
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Debounced save to localStorage
-  const saveToStorage = useMemo(
-    () => debounce((tasks: Task[]) => storage.set("klusjes-tasks", tasks), 500),
-    []
-  );
-
+  // Load tasks from API or localStorage
   useEffect(() => {
-    saveToStorage(tasks);
-  }, [tasks, saveToStorage]);
-
-  const addTask = useCallback((taskData: TaskFormData) => {
-    const newTask: Task = {
-      id: generateId(),
-      title: taskData.title,
-      description: taskData.description,
-      roomId: taskData.roomId,
-      priority: taskData.priority,
-      status: taskData.status || "todo",
-      createdAt: new Date(),
-      dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
-      estimatedDuration: taskData.estimatedDuration,
+    const loadTasks = async () => {
+      try {
+        if (isOnline()) {
+          const apiTasks = await tasksApi.getAll();
+          setTasks(apiTasks);
+          // Cache in localStorage for offline use
+          storage.set("klusjes-tasks", apiTasks);
+        } else {
+          // Offline: load from localStorage
+          const cachedTasks = storage.get("klusjes-tasks", []);
+          setTasks(cachedTasks.map((task: any) => ({
+            ...task,
+            createdAt: new Date(task.createdAt),
+            completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
+            dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+          })));
+        }
+      } catch (err) {
+        console.error('Tasks API Error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load tasks');
+        // Fallback to localStorage on error
+        const cachedTasks = storage.get("klusjes-tasks", []);
+        const parsedTasks = cachedTasks.map((task: any) => ({
+          ...task,
+          createdAt: new Date(task.createdAt),
+          completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
+          dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+        }));
+        setTasks(parsedTasks);
+        
+        // If no cached data, provide default tasks for testing
+        if (cachedTasks.length === 0) {
+          const defaultTasks = [
+            {
+              id: '1',
+              title: 'Stofzuigen',
+              description: 'Hele woonkamer stofzuigen',
+              roomId: '1',
+              priority: false,
+              status: 'todo' as const,
+              createdAt: new Date(),
+              estimatedDuration: 30,
+            },
+            {
+              id: '2',
+              title: 'Afwas doen',
+              description: 'Alle vuile vaat opruimen',
+              roomId: '2',
+              priority: true,
+              status: 'in-progress' as const,
+              createdAt: new Date(),
+              estimatedDuration: 15,
+            },
+          ];
+          setTasks(defaultTasks);
+          storage.set("klusjes-tasks", defaultTasks);
+        }
+      } finally {
+        setLoading(false);
+      }
     };
-    setTasks(prev => [...prev, newTask]);
-    return newTask;
+
+    loadTasks();
+    
+    // Smart polling - fast and battery-friendly fallback
+    if (isOnline()) {
+      let pollInterval: NodeJS.Timeout;
+      
+      const startPolling = () => {
+        pollInterval = setInterval(() => {
+          if (isOnline() && !loading && !document.hidden) {
+            loadTasks();
+          }
+        }, 3000); // Even faster: check every 3 seconds
+      };
+      
+      const stopPolling = () => {
+        if (pollInterval) clearInterval(pollInterval);
+      };
+      
+      // Start polling immediately
+      startPolling();
+      
+      // Pause polling when tab is hidden, resume when visible
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          stopPolling();
+        } else {
+          startPolling();
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+        stopPolling();
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
   }, []);
 
-  const updateTask = useCallback((taskId: string, updates: Partial<TaskFormData>) => {
-    setTasks(prev => 
-      prev.map(task => 
-        task.id === taskId 
-          ? {
-              ...task,
-              ...updates,
-              dueDate: updates.dueDate ? new Date(updates.dueDate) : task.dueDate,
-            }
-          : task
-      )
-    );
-  }, []);
+  const addTask = useCallback(async (roomId: string, title: string, description: string, estimatedDuration: number, priority: boolean, dueDate?: string) => {
+    try {
+      const taskData: TaskFormData = {
+        title,
+        description,
+        roomId,
+        priority,
+        estimatedDuration,
+        dueDate,
+        status: "todo",
+      };
 
-  const deleteTask = useCallback((taskId: string) => {
-    setTasks(prev => prev.filter(task => task.id !== taskId));
-  }, []);
+      if (isOnline()) {
+        const newTask = await tasksApi.create(taskData);
+        setTasks(prev => [...prev, newTask]);
+        storage.set("klusjes-tasks", [...tasks, newTask]);
+        return newTask;
+      } else {
+        // Offline: create locally
+        const newTask: Task = {
+          id: generateId(),
+          ...taskData,
+          status: "todo",
+          createdAt: new Date(),
+          dueDate: dueDate ? new Date(dueDate) : undefined,
+        };
+        setTasks(prev => [...prev, newTask]);
+        storage.set("klusjes-tasks", [...tasks, newTask]);
+        // Mark for sync when online
+        const pendingSync: PendingSync = storage.get("pending-sync", { rooms: [], tasks: [] });
+        pendingSync.tasks.push({ action: 'create', data: newTask });
+        storage.set("pending-sync", pendingSync);
+        return newTask;
+      }
+    } catch (err) {
+      throw new Error('Failed to add task');
+    }
+  }, [tasks]);
 
-  const progressTask = useCallback((taskId: string) => {
-    setTasks(prev =>
-      prev.map(task =>
-        task.id === taskId
-          ? {
-              ...task,
-              status: task.status === "todo" ? "in-progress" : 
-                     task.status === "in-progress" ? "waiting" :
-                     task.status === "waiting" ? "completed" : "todo" as Task["status"],
-              completedAt: task.status === "waiting" ? new Date() : undefined,
-            }
-          : task
-      )
-    );
-  }, []);
+  const updateTask = useCallback(async (updatedTask: Task) => {
+    try {
+      if (isOnline()) {
+        await tasksApi.update(updatedTask);
+      }
+      setTasks(prev => 
+        prev.map(task => 
+          task.id === updatedTask.id ? updatedTask : task
+        )
+      );
+      storage.set("klusjes-tasks", tasks.map(task => 
+        task.id === updatedTask.id ? updatedTask : task
+      ));
+    } catch (err) {
+      throw new Error('Failed to update task');
+    }
+  }, [tasks]);
+
+  const deleteTask = useCallback(async (taskId: string) => {
+    try {
+      if (isOnline()) {
+        await tasksApi.delete(taskId);
+      }
+      setTasks(prev => prev.filter(task => task.id !== taskId));
+      storage.set("klusjes-tasks", tasks.filter(task => task.id !== taskId));
+    } catch (err) {
+      throw new Error('Failed to delete task');
+    }
+  }, [tasks]);
+
+  const progressTask = useCallback(async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const statusOrder = ["todo", "in-progress", "waiting", "completed"] as const;
+    const currentIndex = statusOrder.indexOf(task.status);
+    const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
+
+    const updatedTask = {
+      ...task,
+      status: nextStatus,
+      completedAt: nextStatus === "completed" ? new Date() : undefined,
+    };
+
+    await updateTask(updatedTask);
+  }, [tasks, updateTask]);
 
   // Memoized computed values
   const taskStats = useMemo(() => {
@@ -219,6 +452,8 @@ export function useTasks() {
 
   return {
     tasks,
+    loading,
+    error,
     taskStats,
     addTask,
     updateTask,

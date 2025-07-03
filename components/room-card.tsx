@@ -30,7 +30,9 @@ export const RoomCard = React.memo(function RoomCard({
   // Memoized computed values for performance
   const taskCounts = React.useMemo(() => {
     const completed = tasks.filter(task => task.status === "completed");
-    const pending = tasks.filter(task => task.status !== "completed");
+    const pending = tasks
+      .filter(task => task.status !== "completed")
+      .sort((a, b) => Number(b.priority) - Number(a.priority));
     
     return { completed, pending };
   }, [tasks]);
@@ -47,22 +49,21 @@ export const RoomCard = React.memo(function RoomCard({
   }, []);
 
   const getStatusIcon = React.useCallback((status: Task["status"]) => {
+    // Icons in negatief (wit) – kleur wordt door achtergrondvlak bepaald
     switch (status) {
       case "completed":
-        return <CheckCircle2 className="h-4 w-4" style={{ color: "hsl(var(--status-completed))" }} />;
+        return <CheckCircle2 className="h-4 w-4 text-background" />;
       case "in-progress":
-        return <Clock className="h-4 w-4" style={{ color: "hsl(var(--status-progress))" }} />;
+        return <Play className="h-4 w-4 text-background" />;
       case "waiting":
-        return <Pause className="h-4 w-4" style={{ color: "hsl(var(--status-waiting))" }} />;
+        return <Pause className="h-4 w-4 text-background" />;
       default:
-        return <AlertCircle className="h-4 w-4" style={{ color: "hsl(var(--status-todo))" }} />;
+        return <AlertCircle className="h-4 w-4 text-background" />;
     }
   }, []);
 
-  const getPriorityBorder = React.useCallback((priority: boolean) => {
-    return priority 
-      ? "border-l-[3px] border-l-[hsl(var(--priority-high))]" 
-      : "border-l-[3px] border-l-transparent";
+  const getPriorityStyles = React.useCallback((priority: boolean) => {
+    return priority ? "bg-muted" : "bg-muted/20";
   }, []);
 
   return (
@@ -128,7 +129,6 @@ export const RoomCard = React.memo(function RoomCard({
                     onSwipeLeft={onTaskProgress}
                     onSwipeRight={onTaskDelete}
                     statusIcon={getStatusIcon(task.status)}
-                    priorityBorder={getPriorityBorder(task.priority)}
                   />
                 ))}
               </div>
@@ -146,7 +146,6 @@ interface SwipeableTaskItemProps {
   onSwipeLeft: (taskId: string) => void;
   onSwipeRight: (taskId: string) => void;
   statusIcon: React.ReactNode;
-  priorityBorder: string;
 }
 
 const SwipeableTaskItem = React.memo(function SwipeableTaskItem({ 
@@ -154,8 +153,7 @@ const SwipeableTaskItem = React.memo(function SwipeableTaskItem({
   onTap, 
   onSwipeLeft, 
   onSwipeRight, 
-  statusIcon, 
-  priorityBorder 
+  statusIcon 
 }: SwipeableTaskItemProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [dragOffset, setDragOffset] = React.useState(0);
@@ -222,8 +220,8 @@ const SwipeableTaskItem = React.memo(function SwipeableTaskItem({
       {getBackgroundAction()}
       <div
         className={cn(
-          "relative flex items-center gap-2 p-3 bg-muted/20 border border-border rounded-md cursor-pointer transition-all touch-pan-y",
-          priorityBorder,
+          "relative flex items-center gap-2 p-3 pr-12 border rounded-md cursor-pointer transition-all touch-pan-y",
+          (task.priority ? "bg-muted ring-2 ring-[hsl(var(--priority-high))] shadow-[0_0_6px_hsl(var(--priority-high)/0.6)]" : "bg-muted/20 border-border"),
           isDragging ? "transition-none" : "transition-transform duration-200"
         )}
         style={{
@@ -243,7 +241,6 @@ const SwipeableTaskItem = React.memo(function SwipeableTaskItem({
         }}
         aria-label={`${task.title} - ${task.status}`}
       >
-        {statusIcon}
         <div className="flex-1 min-w-0">
           <div className="font-medium text-sm text-card-foreground truncate">
             {task.title}
@@ -255,15 +252,28 @@ const SwipeableTaskItem = React.memo(function SwipeableTaskItem({
           )}
           {task.estimatedDuration && (
             <div className="text-xs text-muted-foreground">
-              ⏱️ {task.estimatedDuration} min
+              ⏱️ {task.estimatedDuration} min{task.priority && (
+                <span className="ml-1 font-semibold text-[hsl(var(--priority-high))]">prio</span>
+              )}
             </div>
           )}
         </div>
-        {task.priority && (
-          <div className="text-xs priority-high" title="Hoge prioriteit">
-            🏆
-          </div>
-        )}
+        {/* no separate icon for priority */}
+
+        {/* status block wordt nu absoluut gepositioneerd */}
+        <div
+          className={cn(
+            "absolute inset-y-0 right-0 flex items-center justify-center w-10",
+            {
+              "bg-[hsl(var(--status-completed))]": task.status === "completed",
+              "bg-[hsl(var(--status-progress))]": task.status === "in-progress",
+              "bg-[hsl(var(--status-waiting))]": task.status === "waiting",
+              "bg-[hsl(var(--status-todo))]": task.status === "todo",
+            }
+          )}
+        >
+          {statusIcon}
+        </div>
       </div>
     </div>
   );

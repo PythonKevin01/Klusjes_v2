@@ -6,6 +6,12 @@ export interface Room {
   iconName?: string;
 }
 
+export interface TaskPhoto {
+  id: string;
+  url: string;
+  createdAt?: Date;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -17,6 +23,7 @@ export interface Task {
   createdAt: Date;
   completedAt?: Date;
   estimatedDuration?: number; // in minutes
+  photos?: TaskPhoto[];
 }
 
 export interface TaskFormData {

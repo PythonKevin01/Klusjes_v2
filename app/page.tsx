@@ -13,21 +13,22 @@ import { useUIState } from "@/lib/hooks";
 import { useToast } from "@/components/ui/toast";
 import { Task } from "@/types";
 import { Plus, Settings } from "lucide-react";
+import { DebugPanel } from "@/components/debug-panel";
 
 export default function HomePage() {
   const [isClient, setIsClient] = React.useState(false);
-  const { rooms, addRoom, updateRoom, deleteRoom } = useRooms();
-  const { tasks, addTask, updateTask, deleteTask } = useTasks();
+  const { rooms, loading: roomsLoading, error: roomsError, addRoom, updateRoom, deleteRoom } = useRooms();
+  const { tasks, loading: tasksLoading, error: tasksError, addTask, updateTask, deleteTask } = useTasks();
   const { 
-    isRoomFormOpen, 
-    isTaskFormOpen, 
-    selectedTask, 
+    showRoomForm: isRoomFormOpen, 
+    showTaskForm: isTaskFormOpen, 
+    editingTask: selectedTask, 
     selectedRoomId,
     openRoomForm,
     closeRoomForm,
     openTaskForm,
     closeTaskForm,
-    openTaskEditor,
+    editTask: openTaskEditor,
     closeTaskEditor
   } = useUIState();
   const { showToast } = useToast();
@@ -38,13 +39,13 @@ export default function HomePage() {
   }, []);
 
   // Memoized handlers
-  const handleRoomSubmit = React.useCallback(async (data: { name: string; description: string }) => {
+  const handleRoomSubmit = React.useCallback(async (data: { name: string; description: string; color: string }) => {
     try {
       await addRoom(data.name, data.description);
       closeRoomForm();
       showToast("Kamer succesvol toegevoegd! 🏠", "success");
     } catch (error) {
-      showToast("Er ging iets mis bij het toevoegen van de kamer", "error");
+      showToast("Er ging iets mis bij het toevoegen van de kamer", "destructive");
       console.error("Failed to add room:", error);
     }
   }, [addRoom, closeRoomForm, showToast]);
@@ -54,39 +55,45 @@ export default function HomePage() {
     description: string;
     estimatedDuration: number;
     priority: boolean;
+    roomId: string;
+    dueDate?: string;
   }) => {
     try {
-      if (!selectedRoomId) {
-        showToast("Geen kamer geselecteerd", "error");
+      const roomIdToUse = data.roomId || selectedRoomId;
+      if (!roomIdToUse) {
+        showToast("Geen kamer geselecteerd", "destructive");
         return;
       }
-      
-      await addTask(selectedRoomId, data.title, data.description, data.estimatedDuration, data.priority);
+      await addTask(roomIdToUse, data.title, data.description, data.estimatedDuration, data.priority, data.dueDate);
       closeTaskForm();
       showToast("Klusje succesvol toegevoegd! ✅", "success");
     } catch (error) {
-      showToast("Er ging iets mis bij het toevoegen van het klusje", "error");
+      showToast("Er ging iets mis bij het toevoegen van het klusje", "destructive");
       console.error("Failed to add task:", error);
     }
   }, [selectedRoomId, addTask, closeTaskForm, showToast]);
 
-  const handleTaskUpdate = React.useCallback(async (updatedTask: Task) => {
+  const handleTaskUpdate = React.useCallback(async (taskId: string, data: any) => {
     try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      
+      const updatedTask = { ...task, ...data };
       await updateTask(updatedTask);
       closeTaskEditor();
       showToast("Klusje succesvol bijgewerkt! 📝", "success");
     } catch (error) {
-      showToast("Er ging iets mis bij het bijwerken van het klusje", "error");
+      showToast("Er ging iets mis bij het bijwerken van het klusje", "destructive");
       console.error("Failed to update task:", error);
     }
-  }, [updateTask, closeTaskEditor, showToast]);
+  }, [tasks, updateTask, closeTaskEditor, showToast]);
 
   const handleTaskDelete = React.useCallback(async (taskId: string) => {
     try {
       await deleteTask(taskId);
       showToast("Klusje verwijderd 🗑️", "success");
     } catch (error) {
-      showToast("Er ging iets mis bij het verwijderen van het klusje", "error");
+      showToast("Er ging iets mis bij het verwijderen van het klusje", "destructive");
       console.error("Failed to delete task:", error);
     }
   }, [deleteTask, showToast]);
@@ -111,7 +118,7 @@ export default function HomePage() {
       
       showToast(statusMessages[nextStatus], "success");
     } catch (error) {
-      showToast("Er ging iets mis bij het bijwerken van de status", "error");
+      showToast("Er ging iets mis bij het bijwerken van de status", "destructive");
       console.error("Failed to update task status:", error);
     }
   }, [tasks, updateTask, showToast]);
@@ -178,18 +185,42 @@ export default function HomePage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
+        {/* Loading State */}
+        {(roomsLoading || tasksLoading) && (
+          <div className="text-center py-16">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Gegevens laden...</p>
+          </div>
+        )}
 
-        {/* Completion percentage above rooms */}
-          {isClient && stats.totalTasks > 0 && (
-            <div className="mb-4 text-center">
-              <div className="text-lg font-medium text-muted-foreground">
-                <span className="font-bold text-foreground">{stats.completionPercentage}%</span> voltooid
-              </div>
+        {/* Error State */}
+        {(roomsError || tasksError) && (
+          <div className="text-center py-16">
+            <div className="mx-auto max-w-sm">
+              <p className="text-destructive mb-4">
+                {roomsError || tasksError}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Offline modus actief - gegevens uit cache geladen
+              </p>
             </div>
-          )}
+          </div>
+        )}
 
-        {/* Rooms Grid */}
-        {rooms.length === 0 ? (
+        {/* Content - only show when not loading */}
+        {!roomsLoading && !tasksLoading && (
+          <>
+            {/* Completion percentage above rooms */}
+            {isClient && stats.totalTasks > 0 && (
+              <div className="mb-4 text-center">
+                <div className="text-lg font-medium text-muted-foreground">
+                  <span className="font-bold text-foreground">{stats.completionPercentage}%</span> voltooid
+                </div>
+              </div>
+            )}
+
+            {/* Rooms Grid */}
+            {rooms.length === 0 ? (
           <div className="text-center py-16">
             <div className="mx-auto max-w-sm">
               <div className="mb-4">
@@ -204,9 +235,22 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {roomCards}
-          </div>
+          <>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {roomCards}
+              
+              {/* Add Room Card */}
+              <div 
+                onClick={openRoomForm}
+                className="group relative bg-muted/30 border-2 border-dashed border-muted-foreground/25 rounded-xl p-6 hover:border-muted-foreground/40 hover:bg-muted/50 transition-all cursor-pointer min-h-[200px] flex flex-col items-center justify-center"
+              >
+                <Plus className="h-8 w-8 text-muted-foreground/60 group-hover:text-muted-foreground/80 mb-2" />
+                <span className="text-sm font-medium text-muted-foreground/60 group-hover:text-muted-foreground/80">
+                  Nieuwe kamer
+                </span>
+              </div>
+            </div>
+          </>
         )}
       
         {/* Forms */}
@@ -219,14 +263,19 @@ export default function HomePage() {
         <TaskForm
           isOpen={isTaskFormOpen}
           onClose={closeTaskForm}
+          rooms={rooms}
+          defaultRoomId={selectedRoomId || null}
           onSubmit={handleTaskSubmit}
         />
 
         {selectedTask && (
           <TaskEditor
             task={selectedTask}
+            rooms={rooms}
+            isOpen={!!selectedTask}
             onSave={handleTaskUpdate}
             onClose={closeTaskEditor}
+            onDelete={handleTaskDelete}
           />
         )}
            {/* Stats Summary - Show after + Kamer button */}
@@ -250,8 +299,12 @@ export default function HomePage() {
             </div>
           </div>
         )}
-
+          </>
+        )}
       </main>
+      
+      {/* Debug Panel - only in development */}
+      <DebugPanel />
     </div>
   );
 } 

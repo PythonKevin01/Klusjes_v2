@@ -2,17 +2,18 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface RoomFormData {
   name: string;
+  description: string;
   color: string;
 }
 
 interface RoomFormProps {
+  isOpen: boolean;
+  onClose: () => void;
   onSubmit: (data: RoomFormData) => void;
-  onCancel: () => void;
 }
 
 const DEFAULT_COLORS = [
@@ -21,9 +22,10 @@ const DEFAULT_COLORS = [
   "#ec4899", "#84cc16"
 ];
 
-export function RoomForm({ onSubmit, onCancel }: RoomFormProps) {
+export function RoomForm({ isOpen, onClose, onSubmit }: RoomFormProps) {
   const [formData, setFormData] = useState<RoomFormData>({
     name: "",
+    description: "",
     color: DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
   });
 
@@ -31,23 +33,31 @@ export function RoomForm({ onSubmit, onCancel }: RoomFormProps) {
     e.preventDefault();
     if (formData.name.trim()) {
       onSubmit(formData);
+      // Reset form
+      setFormData({
+        name: "",
+        description: "",
+        color: DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
+      });
     }
   };
 
+  const handleClose = () => {
+    onClose();
+    // Reset form on close
+    setFormData({
+      name: "",
+      description: "",
+      color: DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
+    });
+  };
+
   return (
-    <Card className="w-full max-w-md mx-auto bg-card border-border">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-card-foreground">Nieuwe kamer toevoegen</CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onCancel}
-          className="h-8 w-8 p-0"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </CardHeader>
-      <CardContent>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nieuwe kamer toevoegen</DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="room-name" className="block text-sm font-medium mb-1 text-card-foreground">
@@ -66,18 +76,34 @@ export function RoomForm({ onSubmit, onCancel }: RoomFormProps) {
             />
           </div>
 
+          <div>
+            <label htmlFor="room-description" className="block text-sm font-medium mb-1 text-card-foreground">
+              Beschrijving
+            </label>
+            <textarea
+              id="room-description"
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              className="w-full px-3 py-2 border border-border rounded-md bg-input text-card-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Optionele beschrijving..."
+              rows={2}
+            />
+          </div>
+
 
 
           <div className="flex gap-3 pt-2">
             <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
               Kamer toevoegen
             </Button>
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button type="button" variant="outline" onClick={handleClose}>
               Annuleren
             </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 } 

@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Room, Task, TaskFormData } from "@/types";
-import { Trash2, Save } from "lucide-react";
+import { Room, Task, TaskFormData, TaskPhoto } from "@/types";
+import { Trash2, Save, X } from "lucide-react";
+import { PhotoUpload } from "./photo-upload";
+import { photosApi } from "@/lib/api";
 
 interface TaskEditorProps {
   task: Task | null;
@@ -25,6 +27,9 @@ export function TaskEditor({ task, rooms, isOpen, onClose, onSave, onDelete }: T
     estimatedDuration: undefined,
   });
 
+  const [photos, setPhotos] = useState<TaskPhoto[]>([]);
+  const [uploadError, setUploadError] = useState<string>("");
+
   useEffect(() => {
     if (task) {
       setFormData({
@@ -36,6 +41,7 @@ export function TaskEditor({ task, rooms, isOpen, onClose, onSave, onDelete }: T
         dueDate: task.dueDate ? task.dueDate.toISOString().split('T')[0] : "",
         estimatedDuration: task.estimatedDuration,
       });
+      setPhotos(task.photos || []);
     }
   }, [task]);
 
@@ -51,6 +57,29 @@ export function TaskEditor({ task, rooms, isOpen, onClose, onSave, onDelete }: T
     if (task) {
       onDelete(task.id);
       onClose();
+    }
+  };
+
+  const handlePhotoUpload = (photo: { id: string; url: string }) => {
+    setPhotos(prev => [...prev, {
+      id: photo.id,
+      url: photo.url,
+      createdAt: new Date()
+    }]);
+    setUploadError("");
+  };
+
+  const handlePhotoError = (error: string) => {
+    setUploadError(error);
+  };
+
+  const removePhoto = async (photoId: string) => {
+    try {
+      await photosApi.delete(photoId);
+      setPhotos(prev => prev.filter(p => p.id !== photoId));
+    } catch (error) {
+      console.error('Failed to delete photo:', error);
+      setUploadError('Foto verwijderen mislukt');
     }
   };
 
@@ -84,7 +113,7 @@ export function TaskEditor({ task, rooms, isOpen, onClose, onSave, onDelete }: T
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-md mx-auto bg-card border-border">
+      <DialogContent className="w-full max-w-lg mx-auto bg-card border-border max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-card-foreground">Klusje bewerken</DialogTitle>
         </DialogHeader>
@@ -132,6 +161,48 @@ export function TaskEditor({ task, rooms, isOpen, onClose, onSave, onDelete }: T
               placeholder="Extra details..."
               rows={3}
             />
+          </div>
+
+          {/* Photo Upload Section */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-card-foreground">
+              Foto's
+            </label>
+            
+            {/* Photo Gallery */}
+            {photos.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {photos.map((photo) => (
+                  <div key={photo.id} className="relative group">
+                    <img
+                      src={photo.url}
+                      alt="Task photo"
+                      className="w-full h-32 object-cover rounded-lg border border-border"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => removePhoto(photo.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Photo Upload */}
+            <PhotoUpload
+              taskId={task.id}
+              onUpload={handlePhotoUpload}
+              onError={handlePhotoError}
+            />
+            
+            {uploadError && (
+              <p className="text-sm text-destructive mt-1">{uploadError}</p>
+            )}
           </div>
 
           <div>
@@ -235,7 +306,8 @@ export function TaskEditor({ task, rooms, isOpen, onClose, onSave, onDelete }: T
           <div className="flex gap-3 pt-4">
             <Button 
               type="submit" 
-              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+              variant="outline"
+              className="flex-1 border-[hsl(var(--priority-high))] text-[hsl(var(--priority-high))] hover:bg-[hsl(var(--priority-high))/10]"
             >
               <Save className="h-4 w-4 mr-2" />
               Opslaan

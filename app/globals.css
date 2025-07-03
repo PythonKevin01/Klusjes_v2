@@ -30,9 +30,9 @@
   --chart-5: 27 87% 67%;
 
   /* Custom status colors */
-  --status-todo: 0 0% 64.9%;
-  --status-progress: 221.2 83.2% 53.3%;
-  --status-waiting: 47.9 95.8% 53.1%;
+  --status-todo: 0 72% 50%; /* rood */
+  --status-progress: 47.9 95.8% 53.1%; /* geel */
+  --status-waiting: 0 0% 64.9%; /* grijs */
   --status-completed: 142.1 76.2% 36.3%;
   --priority-high: 0 84.2% 60.2%;
 
@@ -67,9 +67,9 @@
   --chart-5: 340 75% 55%;
 
   /* Custom status colors for dark mode */
-  --status-todo: 0 0% 45.1%;
-  --status-progress: 217.2 91.2% 59.8%;
-  --status-waiting: 47.9 95.8% 53.1%;
+  --status-todo: 0 65% 60%; /* rood donker */
+  --status-progress: 47.9 95.8% 53.1%; /* geel */
+  --status-waiting: 0 0% 45.1%; /* grijs */
   --status-completed: 142.1 70.6% 45.3%;
   --priority-high: 0 72.2% 50.6%;
 }

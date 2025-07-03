@@ -1,0 +1,18 @@
+# Prevent PHP execution in uploads directory
+<FilesMatch "\.ph(p[3457]?|t|tml)$">
+    deny from all
+</FilesMatch>
+
+# Allow only image files
+<FilesMatch "(?i)\.(jpe?g|png|gif|webp|bmp|ico|svg)$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>
+
+# Enable CORS for images
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes 

@@ -1,0 +1,83 @@
+# Next.js Static Export Configuration
+Options +FollowSymLinks -MultiViews
+RewriteEngine On
+
+# Set proper MIME types for JavaScript files
+<IfModule mod_mime.c>
+    AddType application/javascript .js
+    AddType text/css .css
+    AddType application/json .json
+    AddType application/octet-stream .map
+    
+    # Special handling for renamed .txt files that are actually JavaScript
+    <LocationMatch "^/_next/.*\.txt$">
+        ForceType application/javascript
+    </LocationMatch>
+</IfModule>
+
+# Allow all static files - comprehensive approach
+<FilesMatch "\.(js|mjs|css|map|json|txt|ico|png|jpg|jpeg|gif|svg|webp|woff|woff2|ttf|eot|html|htm|xml)$">
+    Order Allow,Deny
+    Allow from all
+    Require all granted
+</FilesMatch>
+
+# Special handling for .txt files in _next directory (they're actually JS)
+<LocationMatch "^/_next/.*\.txt$">
+    Header always set Content-Type "application/javascript"
+    Header always set Access-Control-Allow-Origin "*"
+</LocationMatch>
+
+# Specific handling for _next directory (Next.js assets)
+<IfModule mod_rewrite.c>
+    # Allow direct access to _next static files
+    RewriteRule ^_next/static/ - [L]
+    RewriteRule ^_next/ - [L]
+</IfModule>
+
+# Extra protection for _next directory JavaScript files
+<Directory "_next">
+    Options +FollowSymLinks -Indexes
+    
+    <FilesMatch "\.(js|mjs|css|map|json|txt)$">
+        Order Allow,Deny
+        Allow from all
+        Require all granted
+        Header always set Content-Type "application/javascript" env=jsfile
+        Header always set Access-Control-Allow-Origin "*"
+    </FilesMatch>
+    
+    SetEnvIf Request_URI "\.js$" jsfile
+    SetEnvIf Request_URI "\.mjs$" jsfile
+</Directory>
+
+# Security headers for static assets
+<IfModule mod_headers.c>
+    # Cache static assets
+    <FilesMatch "\.(js|css|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    
+    # Enable CORS for assets
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+</IfModule>
+
+# Fallback for SPA routing (not needed for static export but good to have)
+<IfModule mod_rewrite.c>
+    # Handle client-side routing
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} !^/_next/
+    RewriteRule . /index.html [L]
+</IfModule>
+
+# Default documents
+DirectoryIndex index.html
+
+# Security - prevent access to sensitive files
+<FilesMatch "\.(env|config|lock)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch> 

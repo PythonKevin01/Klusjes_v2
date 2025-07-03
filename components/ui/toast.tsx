@@ -87,7 +87,15 @@ export function useToast() {
   if (!context) {
     throw new Error("useToast must be used within a ToastProvider");
   }
-  return context;
+  
+  const showToast = React.useCallback((message: string, variant: "default" | "destructive" | "success" = "default") => {
+    context.toast({
+      title: message,
+      variant,
+    });
+  }, [context]);
+  
+  return { ...context, showToast };
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
