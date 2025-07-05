@@ -170,7 +170,7 @@ export function useRooms() {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
-  }, [isPolling]);
+  }, []);
 
   const addRoom = useCallback(async (name: string, description: string = "", color: string = "#6366f1") => {
     try {
@@ -356,7 +356,7 @@ export function useTasks() {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
-  }, [isPolling]);
+  }, []);
 
   const addTask = useCallback(async (roomId: string, title: string, description: string, estimatedDuration: number, priority: boolean, dueDate?: string) => {
     try {
